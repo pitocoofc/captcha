@@ -21,7 +21,7 @@
 
     .captcha-header { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; color: #38bdf8; }
 
-    /* Animação do Spinner */
+    /* Spinner */
     .spinner-container {
       display: flex;
       flex-direction: column;
@@ -45,14 +45,13 @@
       100% { transform: rotate(360deg); }
     }
 
-    /* Conteúdo do Desafio (escondido até o spinner terminar) */
     .challenge-content {
       display: none;
     }
 
     .challenge-box {
       background: #0f172a;
-      padding: 16px;
+      padding: 12px;
       border-radius: 8px;
       display: flex;
       align-items: center;
@@ -61,14 +60,10 @@
       user-select: none;
     }
 
-    .challenge-code {
-      font-family: monospace;
-      font-size: 1.4rem;
-      font-weight: bold;
-      letter-spacing: 4px;
-      color: #f43f5e;
-      text-decoration: line-through;
-      font-style: italic;
+    /* Estilização do Canvas onde a imagem é desenhada */
+    canvas {
+      border-radius: 4px;
+      background: #020617;
     }
 
     .refresh-btn {
@@ -76,7 +71,8 @@
       border: none;
       color: #94a3b8;
       cursor: pointer;
-      font-size: 1.2rem;
+      font-size: 1.4rem;
+      padding: 4px 8px;
       transition: color 0.2s;
     }
     .refresh-btn:hover { color: #f8fafc; }
@@ -120,20 +116,19 @@
   <div class="captcha-card">
     <div class="captcha-header">Verificação Humana</div>
 
-    <!-- Spinner Inicial -->
     <div id="loader" class="spinner-container">
       <div class="spinner"></div>
       <span style="font-size: 0.85rem; color: #94a3b8;">Analisando ambiente...</span>
     </div>
 
-    <!-- Áreas do Desafio -->
     <div id="challengeArea" class="challenge-content">
       <div class="challenge-box">
-        <span id="captchaCode" class="challenge-code">------</span>
+        <!-- Elemento Canvas para renderizar a imagem -->
+        <canvas id="captchaCanvas" width="220" height="50"></canvas>
         <button class="refresh-btn" onclick="generateCaptcha()" title="Gerar novo código">↻</button>
       </div>
 
-      <input type="text" id="userInput" placeholder="Digite o código acima" autocomplete="off">
+      <input type="text" id="userInput" placeholder="Digite o código da imagem" autocomplete="off">
       <button class="verify-btn" onclick="verifyCaptcha()">Verificar</button>
     </div>
 
@@ -141,59 +136,52 @@
   </div>
 
   <script>
-    // 1. BLOQUEIO DE IFRAME (Framebusting)
+    // 1. Framebusting
     if (window.top !== window.self) {
       window.top.location = window.self.location;
     }
 
-    const MIN_HUMAN_DELAY_MS = 3000; // 3 segundos de trava
+    const MIN_HUMAN_DELAY_MS = 3000;
     const pageLoadTime = Date.now();
     let currentCode = "";
     let isLockedDueToTiming = false;
-    let targetUrl = "https://google.com"; // Fallback padrão
 
-    // 2. PARSER DE URL DINÂMICA
+    // 2. Parser da URL
     function extractTargetUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const rawUrl = params.get("url");
+      const params = new URLSearchParams(window.location.search);
+      const rawUrl = params.get("url");
 
-  if (rawUrl) {
-    // Garante que tenha o protocolo (http/https)
-    return rawUrl.startsWith("http") ? rawUrl : "https://" + rawUrl;
-  }
-  
-  return "https://google.com"; // Fallback caso não passe nada
-}
+      if (rawUrl) {
+        return rawUrl.startsWith("http") ? rawUrl : "https://" + rawUrl;
+      }
+      return "https://google.com";
+    }
 
-const targetUrl = extractTargetUrl();
-    
+    const targetUrl = extractTargetUrl();
 
-    // 3. ANÁLISE COMPORTAMENTAL DE DIGITAÇÃO PRECOCE
+    // 3. Monitoramento de digitação precoce
     const userInputElement = document.getElementById("userInput");
     
-    // Se o usuário/bot tentar interagir ou digitar antes dos 3 segundos
     window.addEventListener("keydown", function() {
-      const timeElapsed = Date.now() - pageLoadTime;
-      if (timeElapsed < MIN_HUMAN_DELAY_MS) {
+      if (Date.now() - pageLoadTime < MIN_HUMAN_DELAY_MS) {
         isLockedDueToTiming = true;
       }
     });
 
     userInputElement.addEventListener("input", function() {
-      const timeElapsed = Date.now() - pageLoadTime;
-      if (timeElapsed < MIN_HUMAN_DELAY_MS) {
+      if (Date.now() - pageLoadTime < MIN_HUMAN_DELAY_MS) {
         isLockedDueToTiming = true;
       }
     });
 
-    // 4. CICLO DE VIDA DO SPINNER (3 segundos)
+    // 4. Liberação do Spinner
     setTimeout(() => {
       document.getElementById("loader").style.display = "none";
       document.getElementById("challengeArea").style.display = "block";
       generateCaptcha();
     }, MIN_HUMAN_DELAY_MS);
 
-    // GERADOR DE CÓDIGO
+    // 5. GERADOR DE IMAGEM CAPTCHA (Canvas)
     function generateCaptcha() {
       const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
       let code = "";
@@ -201,15 +189,51 @@ const targetUrl = extractTargetUrl();
         code += chars.charAt(Math.floor(Math.random() * chars.length));
       }
       currentCode = code;
-      document.getElementById("captchaCode").innerText = code;
+
+      // Desenha o texto dentro do Canvas
+      const canvas = document.getElementById("captchaCanvas");
+      const ctx = canvas.getContext("2d");
+
+      // Limpa o canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Fundo escuro levemente estilizado
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Adiciona ruído (linhas aleatórias para cruzar o texto)
+      for (let i = 0; i < 5; i++) {
+        ctx.strokeStyle = i % 2 === 0 ? "#38bdf8" : "#f43f5e";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
+        ctx.lineTo(Math.random() * canvas.width, Math.random() * canvas.height);
+        ctx.stroke();
+      }
+
+      // Desenha o texto do código com distorções individuais
+      ctx.font = "bold 24px monospace";
+      ctx.fillStyle = "#f8fafc";
+      
+      for (let i = 0; i < code.length; i++) {
+        const x = 20 + i * 30;
+        const y = 33 + (Math.random() * 8 - 4); // Pequena variação de altura
+        const angle = (Math.random() * 0.4) - 0.2; // Pequeno ângulo aleatório
+        
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.fillText(code[i], 0, 0);
+        ctx.restore();
+      }
+
       document.getElementById("userInput").value = "";
     }
 
-    // 5. VERIFICAÇÃO E REDIRECIONAMENTO
+    // 6. Validação
     function verifyCaptcha() {
       const status = document.getElementById("status");
 
-      // Se acionou a trava de tempo por digitar rápido demais (comportamento de bot)
       if (isLockedDueToTiming) {
         status.className = "status-msg error";
         status.innerText = "✕ Acesso bloqueado: comportamento automatizado detectado.";
@@ -229,7 +253,6 @@ const targetUrl = extractTargetUrl();
         status.className = "status-msg success";
         status.innerText = "✓ Sucesso! Redirecionando...";
         
-        // Redireciona para o destino extraído após 1 segundo
         setTimeout(() => {
           window.location.href = targetUrl;
         }, 1000);
@@ -239,9 +262,6 @@ const targetUrl = extractTargetUrl();
         generateCaptcha();
       }
     }
-
-    // Inicialização
-    extractTargetUrl();
   </script>
 
 </body>
