@@ -154,22 +154,19 @@
 
     // 2. PARSER DE URL DINÂMICA
     function extractTargetUrl() {
-      const fullPath = window.location.href;
-      
-      // Procura por padrão "/url/" ou query parameter "?url="
-      if (fullPath.includes("/url/")) {
-        const rawUrl = fullPath.split("/url/")[1];
-        if (rawUrl) {
-          targetUrl = rawUrl.startsWith("http") ? rawUrl : "https://" + rawUrl;
-        }
-      } else {
-        const params = new URLSearchParams(window.location.search);
-        if (params.has("url")) {
-          const rawUrl = params.get("url");
-          targetUrl = rawUrl.startsWith("http") ? rawUrl : "https://" + rawUrl;
-        }
-      }
-    }
+  const params = new URLSearchParams(window.location.search);
+  const rawUrl = params.get("url");
+
+  if (rawUrl) {
+    // Garante que tenha o protocolo (http/https)
+    return rawUrl.startsWith("http") ? rawUrl : "https://" + rawUrl;
+  }
+  
+  return "https://google.com"; // Fallback caso não passe nada
+}
+
+const targetUrl = extractTargetUrl();
+    
 
     // 3. ANÁLISE COMPORTAMENTAL DE DIGITAÇÃO PRECOCE
     const userInputElement = document.getElementById("userInput");
