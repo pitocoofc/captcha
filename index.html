@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verificação de Segurança</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    
+    .captcha-card {
+      background: #1e293b;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      width: 100%;
+      max-width: 360px;
+      border: 1px solid #334155;
+      text-align: center;
+    }
+
+    .captcha-header { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; color: #38bdf8; }
+
+    /* Animação do Spinner */
+    .spinner-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 0;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #334155;
+      border-top: 4px solid #38bdf8;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 12px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Conteúdo do Desafio (escondido até o spinner terminar) */
+    .challenge-content {
+      display: none;
+    }
+
+    .challenge-box {
+      background: #0f172a;
+      padding: 16px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      user-select: none;
+    }
+
+    .challenge-code {
+      font-family: monospace;
+      font-size: 1.4rem;
+      font-weight: bold;
+      letter-spacing: 4px;
+      color: #f43f5e;
+      text-decoration: line-through;
+      font-style: italic;
+    }
+
+    .refresh-btn {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 1.2rem;
+      transition: color 0.2s;
+    }
+    .refresh-btn:hover { color: #f8fafc; }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: #fff;
+      margin-bottom: 12px;
+      outline: none;
+    }
+    input[type="text"]:focus { border-color: #38bdf8; }
+
+    button.verify-btn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button.verify-btn:hover { background: #1d4ed8; }
+
+    .status-msg {
+      margin-top: 12px;
+      font-size: 0.9rem;
+      min-height: 20px;
+    }
+    .success { color: #4ade80; }
+    .error { color: #f87171; }
+  </style>
+</head>
+<body>
+
+  <div class="captcha-card">
+    <div class="captcha-header">Verificação Humana</div>
+
+    <!-- Spinner Inicial -->
+    <div id="loader" class="spinner-container">
+      <div class="spinner"></div>
+      <span style="font-size: 0.85rem; color: #94a3b8;">Analisando ambiente...</span>
+    </div>
+
+    <!-- Áreas do Desafio -->
+    <div id="challengeArea" class="challenge-content">
+      <div class="challenge-box">
+        <span id="captchaCode" class="challenge-code">------</span>
+        <button class="refresh-btn" onclick="generateCaptcha()" title="Gerar novo código">↻</button>
+      </div>
+
+      <input type="text" id="userInput" placeholder="Digite o código acima" autocomplete="off">
+      <button class="verify-btn" onclick="verifyCaptcha()">Verificar</button>
+    </div>
+
+    <div id="status" class="status-msg"></div>
+  </div>
+
+  <script>
+    // 1. BLOQUEIO DE IFRAME (Framebusting)
+    if (window.top !== window.self) {
+      window.top.location = window.self.location;
+    }
+
+    const MIN_HUMAN_DELAY_MS = 3000; // 3 segundos de trava
+    const pageLoadTime = Date.now();
+    let currentCode = "";
+    let isLockedDueToTiming = false;
+    let targetUrl = "https://google.com"; // Fallback padrão
+
+    // 2. PARSER DE URL DINÂMICA
+    function extractTargetUrl() {
+      const fullPath = window.location.href;
+      
+      // Procura por padrão "/url/" ou query parameter "?url="
+      if (fullPath.includes("/url/")) {
+        const rawUrl = fullPath.split("/url/")[1];
+        if (rawUrl) {
+          targetUrl = rawUrl.startsWith("http") ? rawUrl : "https://" + rawUrl;
+        }
+      } else {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has("url")) {
+          const rawUrl = params.get("url");
+          targetUrl = rawUrl.startsWith("http") ? rawUrl : "https://" + rawUrl;
+        }
+      }
+    }
+
+    // 3. ANÁLISE COMPORTAMENTAL DE DIGITAÇÃO PRECOCE
+    const userInputElement = document.getElementById("userInput");
+    
+    // Se o usuário/bot tentar interagir ou digitar antes dos 3 segundos
+    window.addEventListener("keydown", function() {
+      const timeElapsed = Date.now() - pageLoadTime;
+      if (timeElapsed < MIN_HUMAN_DELAY_MS) {
+        isLockedDueToTiming = true;
+      }
+    });
+
+    userInputElement.addEventListener("input", function() {
+      const timeElapsed = Date.now() - pageLoadTime;
+      if (timeElapsed < MIN_HUMAN_DELAY_MS) {
+        isLockedDueToTiming = true;
+      }
+    });
+
+    // 4. CICLO DE VIDA DO SPINNER (3 segundos)
+    setTimeout(() => {
+      document.getElementById("loader").style.display = "none";
+      document.getElementById("challengeArea").style.display = "block";
+      generateCaptcha();
+    }, MIN_HUMAN_DELAY_MS);
+
+    // GERADOR DE CÓDIGO
+    function generateCaptcha() {
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let code = "";
+      for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      currentCode = code;
+      document.getElementById("captchaCode").innerText = code;
+      document.getElementById("userInput").value = "";
+    }
+
+    // 5. VERIFICAÇÃO E REDIRECIONAMENTO
+    function verifyCaptcha() {
+      const status = document.getElementById("status");
+
+      // Se acionou a trava de tempo por digitar rápido demais (comportamento de bot)
+      if (isLockedDueToTiming) {
+        status.className = "status-msg error";
+        status.innerText = "✕ Acesso bloqueado: comportamento automatizado detectado.";
+        document.getElementById("userInput").disabled = true;
+        return;
+      }
+
+      const input = document.getElementById("userInput").value.trim().toUpperCase();
+
+      if (!input) {
+        status.className = "status-msg error";
+        status.innerText = "Por favor, digite o código.";
+        return;
+      }
+
+      if (input === currentCode) {
+        status.className = "status-msg success";
+        status.innerText = "✓ Sucesso! Redirecionando...";
+        
+        // Redireciona para o destino extraído após 1 segundo
+        setTimeout(() => {
+          window.location.href = targetUrl;
+        }, 1000);
+      } else {
+        status.className = "status-msg error";
+        status.innerText = "✕ Código incorreto. Tente novamente.";
+        generateCaptcha();
+      }
+    }
+
+    // Inicialização
+    extractTargetUrl();
+  </script>
+
+</body>
+</html>
